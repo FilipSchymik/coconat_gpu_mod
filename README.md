@@ -116,13 +116,36 @@ conda create -n coconat python=3.8
 conda activate coconat
 ```
 
-Install dependencies:
+Install dependencies (CPU-only PyTorch):
 
 ```
 python -m pip install --upgrade pip
 pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 pip install --no-cache-dir numpy biopython fair-esm transformers[torch]==4.31.0 sentencepiece
 ```
+
+### GPU inference (optional)
+
+CoCoNat automatically runs the PyTorch models (ProtT5, ESM2, the register LSTM
+and the oligomeric-state MLP) on a GPU when one is visible, and falls back to
+CPU otherwise. The heavy protein language models (ProtT5-XL and ESM2-650M)
+benefit the most. The CRF refinement step (`biocrf-static`) always runs on CPU.
+
+To enable it, install a CUDA-enabled PyTorch build instead of the CPU one above.
+On an HPC system, load the CUDA toolkit first and match the torch CUDA version
+to it, e.g.:
+
+```
+module load CUDA/11.8.0
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+The device is selected automatically (`cuda` if available, else `cpu`). You can
+force a specific device by setting the `COCONAT_DEVICE` environment variable,
+e.g. `COCONAT_DEVICE=cpu` or `COCONAT_DEVICE=cuda:1`.
+
+ProtT5-XL needs roughly 11-14 GB of VRAM in single precision; a GPU with 16 GB
+or more is recommended.
 
 Clone this repo:
 

@@ -16,4 +16,14 @@ PROT_T5_MODEL = "%s/prot_t5_xl_uniref50" % COCONAT_PLM_DIR
 
 ESM_MODEL = "%s/esm2/esm2_t33_650M_UR50D.pt" % COCONAT_PLM_DIR
 
-DEVICE = "cpu"
+# Device used for the PyTorch models (ProtT5, ESM2, the register LSTM and the
+# oligomeric-state MLP). Use the GPU when one is visible, otherwise fall back to
+# CPU so the same code runs unchanged on CPU-only nodes. Set COCONAT_DEVICE to
+# force a specific device (e.g. "cpu", "cuda", "cuda:1").
+import os as _os
+import torch as _torch
+
+DEVICE = _os.environ.get(
+    "COCONAT_DEVICE",
+    "cuda" if _torch.cuda.is_available() else "cpu"
+)

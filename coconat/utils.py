@@ -42,15 +42,16 @@ def join_chunks(chunk_ids, embeddings):
     return ret
 
 def embed_prot_t5(sequences):
-    #device = torch.device(cfg.DEVICE)
-    print("Loading pretrained ProtT5 model...", file=sys.stderr)
-    model = T5EncoderModel.from_pretrained(cfg.PROT_T5_MODEL)
+    device = torch.device(cfg.DEVICE)
+    print("Loading pretrained ProtT5 model on %s..." % device, file=sys.stderr)
+    model = T5EncoderModel.from_pretrained(cfg.PROT_T5_MODEL).to(device)
+    model.eval()
     tokenizer = T5Tokenizer.from_pretrained(cfg.PROT_T5_MODEL)
     print("Done.", file=sys.stderr)
     seqs = [" ".join(list(re.sub(r"[UZOB]", "X", sequence))) for sequence in sequences]
     ids = tokenizer.batch_encode_plus(seqs, add_special_tokens=True, padding="longest")
-    input_ids = torch.tensor(ids['input_ids']) #.to(device)
-    attention_mask = torch.tensor(ids['attention_mask']) #.to(device)
+    input_ids = torch.tensor(ids['input_ids']).to(device)
+    attention_mask = torch.tensor(ids['attention_mask']).to(device)
     with torch.no_grad():
         embedding_repr = model(input_ids=input_ids,attention_mask=attention_mask)
 
@@ -62,17 +63,17 @@ def embed_prot_t5(sequences):
     return ret
 
 def embed_esm(sequences, seq_ids):
-    #device = torch.device(cfg.DEVICE)
-    print("Loading pretrained ESM2 model...", file=sys.stderr)
+    device = torch.device(cfg.DEVICE)
+    print("Loading pretrained ESM2 model on %s..." % device, file=sys.stderr)
     model, alphabet = esm.pretrained.load_model_and_alphabet(cfg.ESM_MODEL)
-    #model.to(device)
+    model = model.to(device)
     print("Done", file=sys.stderr)
     model.eval()
     batch_converter = alphabet.get_batch_converter()
     data = list(zip(seq_ids, sequences))
     batch_labels, batch_strs, batch_tokens = batch_converter(data)
     batch_lens = (batch_tokens != alphabet.padding_idx).sum(1)
-    #batch_tokens.to(device)
+    batch_tokens = batch_tokens.to(device)
     with torch.no_grad():
         results = model(batch_tokens, repr_layers=[33], return_contacts=False)
     token_representations = results["representations"][33]
@@ -82,13 +83,16 @@ def embed_esm(sequences, seq_ids):
     return ret
 
 def predict_register_probability_torch(samples, lengths, work_env):
+    device = torch.device(cfg.DEVICE)
     register_out_file = work_env.createFile("registers.", ".tsv")
-    checkpoint = torch.load(cfg.COCONAT_REGISTER_MODEL_TORCH)
+    checkpoint = torch.load(cfg.COCONAT_REGISTER_MODEL_TORCH, map_location=device)
     model = stmod.MMModelLSTM()
     model.load_state_dict(checkpoint["state_dict"])
+    model = model.to(device)
     model.eval()
 
-    pred = model(samples, lengths).detach().cpu().numpy()
+    with torch.no_grad():
+        pred = model(samples.to(device), lengths).detach().cpu().numpy()
 
     with open(register_out_file, 'w') as rof:
         for i in range(pred.shape[0]):
@@ -131,13 +135,16 @@ def predict_oligo_state(samples):
     oligo_states, probs = [], []
     oligo_map = {1:"A",0:"P",2:"3",3:"4"}
     if len(samples) > 0:
+        device = torch.device(cfg.DEVICE)
         model = stmod.MeanModel()
-        checkpoint = torch.load(cfg.COCONAT_OLIGO_MODEL)
+        checkpoint = torch.load(cfg.COCONAT_OLIGO_MODEL, map_location=device)
         del checkpoint["state_dict"]["loss_fn.weight"]
         model.load_state_dict(checkpoint["state_dict"])
+        model = model.to(device)
         model.eval()
-        x = torch.tensor(samples).float()
-        pred = model(x).detach().cpu().numpy()
+        x = torch.tensor(samples).float().to(device)
+        with torch.no_grad():
+            pred = model(x).detach().cpu().numpy()
         for i in range(pred.shape[0]):
             oligo_states.append(oligo_map[np.argmax(pred[i])])
             probs.append(np.max(pred[i]))
